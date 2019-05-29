@@ -16,7 +16,7 @@ hyp = {'giou': 0.02,  # giou loss gain
        'wh': 0.1,  # wh loss gain
        'cls': 0.04,  # cls loss gain
        'conf': 4.5,  # conf loss gain
-       'iou_t': 0.1,  # iou target-anchor training threshold
+       'iou_t': 0.7,  # iou target-anchor training threshold
        'lr0': 0.001,  # initial learning rate
        'lrf': -4.,  # final learning rate = lr0 * (10 ** lrf)
        'momentum': 0.90,  # SGD momentum
