@@ -283,7 +283,7 @@ def compute_loss(p, targets, model):  # predictions, targets, model
     h = model.hyp  # hyperparameters
     bs = p[0].shape[0]  # batch size
     k = bs  # loss gain
-    i = 0
+    i = -1
     for pi0 in p:  # layer i predictions, i
         for ai in range(3):
             i += 1
