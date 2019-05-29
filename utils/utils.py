@@ -283,32 +283,29 @@ def compute_loss(p, targets, model):  # predictions, targets, model
     h = model.hyp  # hyperparameters
     bs = p[0].shape[0]  # batch size
     k = bs  # loss gain
-    i = -1
-    for pi0 in p:  # layer i predictions, i
-        for ai in range(3):
-            i += 1
-            b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
-            tconf = torch.zeros_like(pi0[..., 0])  # conf
+    for i, pi0 in enumerate(p):  # layer i predictions, i
+        b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
+        tconf = torch.zeros_like(pi0[..., 0])  # conf
 
-            # Compute losses
-            if len(b):  # number of targets
-                pi = pi0[b, a, gj, gi]  # predictions closest to anchors
-                tconf[b, a, gj, gi] = 1  # conf
-                # pi[..., 2:4] = torch.sigmoid(pi[..., 2:4])  # wh power loss (uncomment)
+        # Compute losses
+        if len(b):  # number of targets
+            pi = pi0[b, a, gj, gi]  # predictions closest to anchors
+            tconf[b, a, gj, gi] = 1  # conf
+            # pi[..., 2:4] = torch.sigmoid(pi[..., 2:4])  # wh power loss (uncomment)
 
-                # Build GIoU boxes
-                pbox = torch.cat((torch.sigmoid(pi[..., 0:2]), torch.exp(pi[..., 2:4]) * anchor_vec[i]), 1)  # predicted box
-                giou = bbox_iou(pbox.t(), tbox[i], GIoU=True)
+            # Build GIoU boxes
+            pbox = torch.cat((torch.sigmoid(pi[..., 0:2]), torch.exp(pi[..., 2:4]) * anchor_vec[i]), 1)  # predicted box
+            giou = bbox_iou(pbox.t(), tbox[i], GIoU=True)
 
-                # lxy += (k * h['giou']) * MSE(torch.zeros_like(giou) + 1 , giou)  # giou loss
-                lxy += (k * h['giou']) * (1.0 - giou).mean()  # giou loss
-                # lxy += (k * h['xy']) * MSE(torch.sigmoid(pi[..., 0:2]), txy[i])  # xy loss
-                # lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
-                lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # class_conf loss
+            # lxy += (k * h['giou']) * MSE(torch.zeros_like(giou) + 1 , giou)  # giou loss
+            lxy += (k * h['giou']) * (1.0 - giou).mean()  # giou loss
+            # lxy += (k * h['xy']) * MSE(torch.sigmoid(pi[..., 0:2]), txy[i])  # xy loss
+            # lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
+            lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # class_conf loss
 
-            # pos_weight = ft([gp[i] / min(gp) * 4.])
-            # BCE = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-            lconf += (k * h['conf']) * BCE(pi0[..., 4], tconf)  # obj_conf loss
+        # pos_weight = ft([gp[i] / min(gp) * 4.])
+        # BCE = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        lconf += (k * h['conf']) * BCE(pi0[..., 4], tconf)  # obj_conf loss
     loss = lxy + lwh + lconf + lcls
 
     return loss, torch.cat((lxy, lwh, lconf, lcls, loss)).detach()
@@ -325,43 +322,41 @@ def build_targets(model, targets):
     for i in model.yolo_layers:
         layer = model.module_list[i][0]
 
-        for ai in range(len(layer.anchor_vec)):
-            # iou of targets-anchors
-            t, a = targets, torch.zeros_like(targets[:,0]).long() + ai
-            gwh = targets[:, 4:6] * layer.ng
-            if nt:
-                # iou = [wh_iou(x, gwh) for x in layer.anchor_vec]
-                # iou, a = torch.stack(iou, 0).max(0)  # best iou and anchor
-                iou = wh_iou(layer.anchor_vec[ai], gwh)
+        # iou of targets-anchors
+        t, a = targets, []
+        gwh = targets[:, 4:6] * layer.ng
+        if nt:
+            iou = [wh_iou(x, gwh) for x in layer.anchor_vec]
+            iou, a = torch.stack(iou, 0).max(0)  # best iou and anchor
 
-                # reject below threshold ious (OPTIONAL, increases P, lowers R)
-                reject = True
-                if reject:
-                    j = iou > iou_thres
-                    t, a, gwh = targets[j], a[j], gwh[j]
+            # reject below threshold ious (OPTIONAL, increases P, lowers R)
+            reject = True
+            if reject:
+                j = iou > iou_thres
+                t, a, gwh = targets[j], a[j], gwh[j]
 
-            # Indices
-            b, c = t[:, :2].long().t()  # target image, class
-            gxy = t[:, 2:4] * layer.ng  # grid x, y
-            gi, gj = gxy.long().t()  # grid x, y indices
-            indices.append((b, a, gj, gi))
+        # Indices
+        b, c = t[:, :2].long().t()  # target image, class
+        gxy = t[:, 2:4] * layer.ng  # grid x, y
+        gi, gj = gxy.long().t()  # grid x, y indices
+        indices.append((b, a, gj, gi))
 
-            # XY coordinates
-            gxy -= gxy.floor()
-            txy.append(gxy)
+        # XY coordinates
+        gxy -= gxy.floor()
+        txy.append(gxy)
 
-            # Width and height
-            twh.append(torch.log(gwh / layer.anchor_vec[a]))  # wh yolo method
-            # twh.append((gwh / layer.anchor_vec[a]) ** (1 / 3) / 2)  # wh power method
+        # Width and height
+        twh.append(torch.log(gwh / layer.anchor_vec[a]))  # wh yolo method
+        # twh.append((gwh / layer.anchor_vec[a]) ** (1 / 3) / 2)  # wh power method
 
-            # GIoU
-            tbox.append(torch.cat((gxy, gwh), 1))  # xywh (grids)
-            anchor_vec.append(layer.anchor_vec[a])
+        # GIoU
+        tbox.append(torch.cat((gxy, gwh), 1))  # xywh (grids)
+        anchor_vec.append(layer.anchor_vec[a])
 
-            # Class
-            tcls.append(c)
-            if c.shape[0]:
-                assert c.max() <= layer.nc, 'Target classes exceed model classes'
+        # Class
+        tcls.append(c)
+        if c.shape[0]:
+            assert c.max() <= layer.nc, 'Target classes exceed model classes'
 
     return txy, twh, tcls, tbox, indices, anchor_vec
 
