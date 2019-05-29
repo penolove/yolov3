@@ -11,7 +11,7 @@ sudo shutdown
 # Re-clone
 rm -rf yolov3  # Warning: remove existing
 git clone https://github.com/ultralytics/yolov3  # master
-# git clone -b test --depth 1 https://github.com/ultralytics/yolov3 test  # branch
+# git clone -b giou --depth 1 https://github.com/ultralytics/yolov3 giou  # branch
 cp -r cocoapi/PythonAPI/pycocotools yolov3
 cp -r weights yolov3 && cd yolov3
 
@@ -44,9 +44,7 @@ wget https://storage.googleapis.com/ultralytics/yolov3/best_v1_0.pt -O weights/b
 
 # Reproduce tutorials
 rm results*.txt  # WARNING: removes existing results
-python3 train.py --nosave --data data/coco_1img.data && mv results.txt results0r_1img.txt
-python3 train.py --nosave --data data/coco_10img.data && mv results.txt results0r_10img.txt
-python3 train.py --nosave --data data/coco_100img.data && mv results.txt results0r_100img.txt
+python3 train.py --nosave --data data/coco_64img.data && mv results.txt results0.txt
 #python3 train.py --nosave --data data/coco_100img.data --transfer && mv results.txt results3_100imgTL.txt
 python3 -c "from utils import utils; utils.plot_results()"
 gsutil cp results*.txt gs://ultralytics
