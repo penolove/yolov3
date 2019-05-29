@@ -301,9 +301,9 @@ def compute_loss(p, targets, model):  # predictions, targets, model
                 giou = bbox_iou(pbox.t(), tbox[i], GIoU=True)
 
                 # lxy += (k * h['giou']) * MSE(torch.zeros_like(giou) + 1 , giou)  # giou loss
-                lxy += (k * h['giou']) * (1.0 - giou).mean()  # giou loss
-                # lxy += (k * h['xy']) * MSE(torch.sigmoid(pi[..., 0:2]), txy[i])  # xy loss
-                # lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
+                # lxy += (k * h['giou']) * (1.0 - giou).mean()  # giou loss
+                lxy += (k * h['xy']) * MSE(torch.sigmoid(pi[..., 0:2]), txy[i])  # xy loss
+                lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
                 lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # class_conf loss
 
             # pos_weight = ft([gp[i] / min(gp) * 4.])
