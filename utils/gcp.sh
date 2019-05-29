@@ -9,11 +9,11 @@ git clone https://github.com/cocodataset/cocoapi && cd cocoapi/PythonAPI && make
 sudo shutdown
 
 # Re-clone
-rm -rf yolov3  # Warning: remove existing
-git clone https://github.com/ultralytics/yolov3  # master
-# git clone -b giou --depth 1 https://github.com/ultralytics/yolov3 giou  # branch
-cp -r cocoapi/PythonAPI/pycocotools yolov3
-cp -r weights yolov3 && cd yolov3
+rm -rf giou  # Warning: remove existing
+# git clone https://github.com/ultralytics/yolov3  # master
+git clone -b giou --depth 1 https://github.com/ultralytics/yolov3 giou  # branch
+cp -r cocoapi/PythonAPI/pycocotools giou
+cp -r weights giou && cd giou
 
 # Train
 python3 train.py
@@ -43,8 +43,7 @@ wget https://storage.googleapis.com/ultralytics/yolov3/latest_v1_0.pt -O weights
 wget https://storage.googleapis.com/ultralytics/yolov3/best_v1_0.pt -O weights/best_v1_0.pt
 
 # Reproduce tutorials
-rm results*.txt  # WARNING: removes existing results
-python3 train.py --nosave --data data/coco_64img.data && mv results.txt results0.txt
+python3 train.py --nosave --data data/coco_64img.data && mv results.txt results_giou.txt
 #python3 train.py --nosave --data data/coco_100img.data --transfer && mv results.txt results3_100imgTL.txt
 python3 -c "from utils import utils; utils.plot_results()"
 gsutil cp results*.txt gs://ultralytics

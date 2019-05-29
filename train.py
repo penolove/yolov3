@@ -11,11 +11,11 @@ from utils.datasets import *
 from utils.utils import *
 
 # Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.204      0.302      0.175      0.234 (square smart)
-hyp = {'giou': 0.02,  # giou loss gain
+hyp = {'giou': 0.01,  # giou loss gain
        'xy': 0.2,  # xy loss gain
        'wh': 0.1,  # wh loss gain
        'cls': 0.04,  # cls loss gain
-       'conf': 4.5,  # conf loss gain
+       'conf': 1,  # conf loss gain
        'iou_t': 0.5,  # iou target-anchor training threshold
        'lr0': 0.001,  # initial learning rate
        'lrf': -4.,  # final learning rate = lr0 * (10 ** lrf)
@@ -353,7 +353,7 @@ if __name__ == '__main__':
             # Mutate hyperparameters
             old_hyp = hyp.copy()
             init_seeds(seed=int(time.time()))
-            s = [.3, .3, .3, .3, .3, .3, .3, .03, .3]
+            s = [.6, .3, .3, .3, .3, .3, .3, .3, .03, .3]
             for i, k in enumerate(hyp.keys()):
                 x = (np.random.randn(1) * s[i] + 1) ** 1.1  # plt.hist(x.ravel(), 100)
                 hyp[k] = hyp[k] * float(x)  # vary by about 30% 1sigma
