@@ -6,3 +6,5 @@ torch >= 1.0.0
 matplotlib
 pycocotools
 tqdm
+eyewitness==1.0.8
+bistiming
