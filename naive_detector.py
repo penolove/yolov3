@@ -38,7 +38,7 @@ parser.add_argument(
 parser.add_argument(
     '--iou-thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
 parser.add_argument(
-    '--conf-thres', type=float, default=0.001, help='object confidence threshold')
+    '--conf-thres', type=float, default=0.1, help='object confidence threshold')
 parser.add_argument(
     '--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
 parser.add_argument(
@@ -48,7 +48,7 @@ parser.add_argument(
 
 
 class YoloV3DetectorWrapper(ObjectDetector):
-    def __init__(self, cfg, img_size, weight_file, data_cfg, conf_thres=0.5, nms_thres=0.5, 
+    def __init__(self, cfg, img_size, weight_file, data_cfg, conf_thres=0.5, nms_thres=0.5,
                  resize_with_padding=True):
         self.device = torch_utils.select_device()
         self.max_img_side = img_size
@@ -83,7 +83,7 @@ class YoloV3DetectorWrapper(ObjectDetector):
     def detect(self, image_obj) -> DetectionResult:
         ori_w, ori_h = image_obj.pil_image_obj.size
         detected_objects = []
-        
+
         target_size = self.get_max_image_side((ori_w, ori_h))  # resize w, h
         if self.resize_with_padding:
             img_array, _, _, _ = letterbox(
@@ -122,12 +122,11 @@ class YoloV3DetectorWrapper(ObjectDetector):
 
 if __name__ == '__main__':
     opt = parser.parse_args()
-    object_detector = YoloV3DetectorWrapper(opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg)
+    object_detector = YoloV3DetectorWrapper(opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg, conf_thres=opt.conf_thres)
     raw_image_path = 'demo/test_image.jpg'
     image_id = ImageId(channel='demo', timestamp=arrow.now().timestamp, file_format='jpg')
     image_obj = Image(image_id, raw_image_path=raw_image_path)
     with Stopwatch('Running inference on image {}...'.format(raw_image_path)):
-        for _ in range(100):
-            detection_result = object_detector.detect(image_obj)
+        detection_result = object_detector.detect(image_obj)
     ImageHandler.draw_bbox(image_obj.pil_image_obj, detection_result.detected_objects)
     ImageHandler.save(image_obj.pil_image_obj, "detected_image/drawn_image.jpg")

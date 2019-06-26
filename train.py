@@ -1,17 +1,37 @@
+import os
 import argparse
 import time
+import glob
+import random
 
+import torch
+import torch.nn as nn
 import torch.distributed as dist
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
+import numpy as np
 from torch.utils.data import DataLoader
 
 import test  # Import test.py to get mAP after each epoch
-from models import *
-from utils.datasets import *
-from utils.utils import *
+from models import (
+    Darknet,
+    load_darknet_weights,
+)
+from utils.datasets import (
+    LoadImagesAndLabels,
+)
+from utils.utils import (
+    init_seeds,
+    model_info,
+    labels_to_class_weights,
+    labels_to_image_weights,
+    plot_images,
+    compute_loss
+)
+from utils import torch_utils
+from utils import parse_data_cfg
 
-# Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.204      0.302      0.175      0.234 (square smart)
+# Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.204      0.302      0.175      0.234 (square smart)  # noqa
 hyp = {'xy': 0.2,  # xy loss gain
        'wh': 0.1,  # wh loss gain
        'cls': 0.04,  # cls loss gain
@@ -23,7 +43,7 @@ hyp = {'xy': 0.2,  # xy loss gain
        'weight_decay': 0.0005}  # optimizer weight decay
 
 
-# Hyperparameters: Original, Metrics: 0.172      0.304      0.156      0.205 (square)
+# Hyperparameters: Original, Metrics: 0.172      0.304      0.156      0.205 (square)  # noqa
 # hyp = {'xy': 0.5,  # xy loss gain
 #        'wh': 0.0625,  # wh loss gain
 #        'cls': 0.0625,  # cls loss gain
@@ -34,7 +54,7 @@ hyp = {'xy': 0.2,  # xy loss gain
 #        'momentum': 0.9,  # SGD momentum
 #        'weight_decay': 0.0005}  # optimizer weight decay
 
-# Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.225      0.251      0.145      0.218 (rect)
+# Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.225      0.251      0.145      0.218 (rect)  # noqa
 # hyp = {'xy': 0.4499,  # xy loss gain
 #        'wh': 0.05121,  # wh loss gain
 #        'cls': 0.04207,  # cls loss gain
@@ -45,7 +65,7 @@ hyp = {'xy': 0.2,  # xy loss gain
 #        'momentum': 0.8823,  # SGD momentum
 #        'weight_decay': 0.0004149}  # optimizer weight decay
 
-# Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.178      0.313      0.167      0.212 (square)
+# Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.178      0.313      0.167      0.212 (square)  # noqa
 # hyp = {'xy': 0.4664,  # xy loss gain
 #        'wh': 0.08437,  # wh loss gain
 #        'cls': 0.05145,  # cls loss gain
@@ -89,7 +109,9 @@ def train(
     model = Darknet(cfg, img_size).to(device)
 
     # Optimizer
-    optimizer = optim.SGD(model.parameters(), lr=hyp['lr0'], momentum=hyp['momentum'], weight_decay=hyp['weight_decay'])
+    optimizer = optim.SGD(
+        model.parameters(), lr=hyp['lr0'],
+        momentum=hyp['momentum'], weight_decay=hyp['weight_decay'])
 
     cutoff = -1  # backbone reaches to cutoff layer
     start_epoch = 0
@@ -98,8 +120,9 @@ def train(
     if resume:  # Load previously saved model
         if transfer:  # Transfer learning
             chkpt = torch.load(weights + 'yolov3-spp.pt', map_location=device)
-            model.load_state_dict({k: v for k, v in chkpt['model'].items() if v.numel() > 1 and v.shape[0] != 255},
-                                  strict=False)
+            chkpt_weights = {
+                k: v for k, v in chkpt['model'].items() if v.numel() > 1 and v.shape[0] != 255}
+            model.load_state_dict(chkpt_weights, strict=False)
             for p in model.parameters():
                 p.requires_grad = True if p.shape[0] == nf else False
 
@@ -124,7 +147,8 @@ def train(
     # lf = lambda x: 10 ** (hyp['lrf'] * x / epochs)  # exp ramp
     # lf = lambda x: 1 - 10 ** (hyp['lrf'] * (1 - x / epochs))  # inverse exp ramp
     # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[round(opt.epochs * x) for x in (0.8, 0.9)], gamma=0.1)
+    scheduler = lr_scheduler.MultiStepLR(
+        optimizer, milestones=[round(opt.epochs * x) for x in (0.8, 0.9)], gamma=0.1)
     scheduler.last_epoch = start_epoch - 1
 
     # # Plot lr schedule
@@ -148,7 +172,9 @@ def train(
 
     # Initialize distributed training
     if torch.cuda.device_count() > 1:
-        dist.init_process_group(backend=opt.backend, init_method=opt.dist_url, world_size=opt.world_size, rank=opt.rank)
+        dist.init_process_group(
+            backend=opt.backend, init_method=opt.dist_url,
+            world_size=opt.world_size, rank=opt.rank)
         model = torch.nn.parallel.DistributedDataParallel(model)
         # sampler = torch.utils.data.distributed.DistributedSampler(dataset)
 
@@ -173,7 +199,8 @@ def train(
 
     # Start training
     model.hyp = hyp  # attach hyperparameters to model
-    model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device)  # attach class weights
+    model.class_weights = labels_to_class_weights(
+        dataset.labels, nc).to(device)  # attach class weights
     model_info(model)
     nb = len(dataloader)
     maps = np.zeros(nc)  # mAP per class
@@ -182,7 +209,8 @@ def train(
     t, t0 = time.time(), time.time()
     for epoch in range(start_epoch, epochs):
         model.train()
-        print(('\n%8s%12s' + '%10s' * 7) % ('Epoch', 'Batch', 'xy', 'wh', 'conf', 'cls', 'total', 'targets', 'time'))
+        print(('\n%8s%12s' + '%10s' * 7) % (
+            'Epoch', 'Batch', 'xy', 'wh', 'conf', 'cls', 'total', 'targets', 'time'))
 
         # Update scheduler
         scheduler.step()
@@ -196,7 +224,8 @@ def train(
         # Update image weights (optional)
         w = model.class_weights.cpu().numpy() * (1 - maps)  # class weights
         image_weights = labels_to_image_weights(dataset.labels, nc=nc, class_weights=w)
-        dataset.indices = random.choices(range(dataset.n), weights=image_weights, k=dataset.n)  # random weighted index
+        # random weighted index
+        dataset.indices = random.choices(range(dataset.n), weights=image_weights, k=dataset.n)
 
         mloss = torch.zeros(5).to(device)  # mean losses
         for i, (imgs, targets, _, _) in enumerate(dataloader):
@@ -250,8 +279,9 @@ def train(
         # Calculate mAP (always test final epoch, skip first 5 if opt.nosave)
         if not (opt.notest or (opt.nosave and epoch < 10)) or epoch == epochs - 1:
             with torch.no_grad():
-                results, maps = test.test(cfg, data_cfg, batch_size=batch_size, img_size=img_size, model=model,
-                                          conf_thres=0.1)
+                results, maps = test.test(
+                    cfg, data_cfg, batch_size=batch_size, img_size=img_size, model=model,
+                    conf_thres=0.1)
 
         # Write epoch results
         with open('results.txt', 'a') as file:
@@ -305,17 +335,23 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=68, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
-    parser.add_argument('--accumulate', type=int, default=4, help='accumulate gradient x batches before optimizing')
+    parser.add_argument('--accumulate', type=int, default=4,
+                        help='accumulate gradient x batches before optimizing')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data-cfg', type=str, default='data/coco_64img.data', help='coco.data file path')
-    parser.add_argument('--multi-scale', action='store_true', help='random image sizes per batch 320 - 608')
+    parser.add_argument('--data-cfg', type=str, default='data/coco_64img.data',
+                        help='coco.data file path')
+    parser.add_argument('--multi-scale', action='store_true',
+                        help='random image sizes per batch 320 - 608')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--transfer', action='store_true', help='transfer learning flag')
-    parser.add_argument('--num-workers', type=int, default=4, help='number of Pytorch DataLoader workers')
-    parser.add_argument('--dist-url', default='tcp://127.0.0.1:9999', type=str, help='distributed training init method')
+    parser.add_argument('--num-workers', type=int, default=4,
+                        help='number of Pytorch DataLoader workers')
+    parser.add_argument('--dist-url', default='tcp://127.0.0.1:9999', type=str,
+                        help='distributed training init method')
     parser.add_argument('--rank', default=0, type=int, help='distributed training node rank')
-    parser.add_argument('--world-size', default=1, type=int, help='number of nodes for distributed training')
+    parser.add_argument('--world-size', default=1, type=int,
+                        help='number of nodes for distributed training')
     parser.add_argument('--backend', default='nccl', type=str, help='distributed backend')
     parser.add_argument('--nosave', action='store_true', help='do not save training results')
     parser.add_argument('--notest', action='store_true', help='only test final epoch')
