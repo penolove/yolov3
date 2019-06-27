@@ -18,7 +18,7 @@ from utils.utils import (
 )
 from utils.datasets import letterbox
 from utils.parse_config import parse_data_cfg
-from models import Darknet, load_darknet_weights
+from models import Darknet, load_darknet_weights, save_weights
 
 
 # class YOLO defines the default value, so suppress any default here
@@ -33,16 +33,19 @@ parser.add_argument(
 parser.add_argument(
     '--weight_file', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
 parser.add_argument(
-    '--conf-thres', type=float, default=0.1, help='object confidence threshold')
+    '--conf-thres', type=float, default=0.08, help='object confidence threshold')
 parser.add_argument(
     '--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
 parser.add_argument(
     '--img-size', type=int, default=416, help='inference size (pixels)')
+parser.add_argument(
+    '--store_weight', action='store_true', help='stores the model to darknet weight',
+    default=False)
 
 
 class YoloV3DetectorWrapper(ObjectDetector):
     def __init__(self, cfg, img_size, weight_file, data_cfg, conf_thres=0.5, nms_thres=0.5,
-                 resize_with_padding=True):
+                 resize_with_padding=True, use_fuse=True):
         self.device = torch_utils.select_device()
         self.max_img_side = img_size
         self.model = Darknet(cfg, img_size)
@@ -57,7 +60,8 @@ class YoloV3DetectorWrapper(ObjectDetector):
             _ = load_darknet_weights(self.model, weight_file)
 
         # Fuse Conv2d + BatchNorm2d layers
-        self.model.fuse()
+        if use_fuse:
+            self.model.fuse()
 
         # set Eval mode
         self.model.to(self.device).eval()
@@ -116,8 +120,9 @@ class YoloV3DetectorWrapper(ObjectDetector):
 
 if __name__ == '__main__':
     opt = parser.parse_args()
+    use_fuse = not opt.store_weight
     object_detector = YoloV3DetectorWrapper(opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg,
-                                            conf_thres=opt.conf_thres)
+                                            conf_thres=opt.conf_thres, use_fuse=use_fuse)
     raw_image_path = 'demo/test_image.jpg'
     image_id = ImageId(channel='demo', timestamp=arrow.now().timestamp, file_format='jpg')
     image_obj = Image(image_id, raw_image_path=raw_image_path)
@@ -125,3 +130,7 @@ if __name__ == '__main__':
         detection_result = object_detector.detect(image_obj)
     ImageHandler.draw_bbox(image_obj.pil_image_obj, detection_result.detected_objects)
     ImageHandler.save(image_obj.pil_image_obj, "detected_image/drawn_image.jpg")
+
+    # stores models to darkent weight
+    if opt.store_weight:
+        save_weights(object_detector.model, path='converted_darknet.weights')
