@@ -98,8 +98,7 @@ class YoloV3DetectorWrapper(ObjectDetector):
             # N, C(RGB), H, W
             img_array = processed_image.transpose(0, 3, 1, 2).astype(np.float32)
             img_array /= 255.0
-            img = torch.from_numpy(img_array).to(self.device)
-
+            img = torch.from_numpy(img_array).cuda().to(self.device)
         pred, _ = self.model(img)
         det = non_max_suppression(pred, self.conf_thres, self.nms_thres)[0]
         if det is not None and len(det) > 0:
@@ -107,7 +106,9 @@ class YoloV3DetectorWrapper(ObjectDetector):
             det[:, :4] = scale_coords(img.shape[2:], det[:, :4], ori_size).round()
             for x1, y1, x2, y2, score, _, label_idx in det:
                 label = self.classes[int(label_idx)]
-                detected_objects.append(BoundedBoxObject(x1, y1, x2, y2, label, score, ''))
+                # make sure not directly reference to the cuda tensor
+                detected_objects.append(BoundedBoxObject(
+                    int(x1), int(y1), int(x2), int(y2), label, float(score), ''))
         image_dict = {
             'image_id': image_obj.image_id,
             'detected_objects': detected_objects,
@@ -122,7 +123,8 @@ class YoloV3DetectorWrapper(ObjectDetector):
 
 if __name__ == '__main__':
     opt = parser.parse_args()
-    object_detector = YoloV3DetectorWrapper(opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg, conf_thres=opt.conf_thres)
+    object_detector = YoloV3DetectorWrapper(opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg,
+                                            conf_thres=opt.conf_thres)
     raw_image_path = 'demo/test_image.jpg'
     image_id = ImageId(channel='demo', timestamp=arrow.now().timestamp, file_format='jpg')
     image_obj = Image(image_id, raw_image_path=raw_image_path)
