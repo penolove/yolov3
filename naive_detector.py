@@ -26,9 +26,6 @@ parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
 '''
 Command line options
 '''
-parser = argparse.ArgumentParser(prog='test.py')
-parser.add_argument(
-    '--batch-size', type=int, default=16, help='size of each image batch')
 parser.add_argument(
     '--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
 parser.add_argument(
@@ -36,13 +33,9 @@ parser.add_argument(
 parser.add_argument(
     '--weight_file', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
 parser.add_argument(
-    '--iou-thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
-parser.add_argument(
     '--conf-thres', type=float, default=0.1, help='object confidence threshold')
 parser.add_argument(
     '--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
-parser.add_argument(
-    '--save-json', action='store_true', help='save a cocoapi-compatible JSON results file')
 parser.add_argument(
     '--img-size', type=int, default=416, help='inference size (pixels)')
 

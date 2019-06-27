@@ -19,13 +19,9 @@ parser.add_argument(
 parser.add_argument(
     '--weight_file', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
 parser.add_argument(
-    '--iou-thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
-parser.add_argument(
-    '--conf-thres', type=float, default=0.1, help='object confidence threshold')
+    '--conf-thres', type=float, default=0.0, help='object confidence threshold')
 parser.add_argument(
     '--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
-parser.add_argument(
-    '--save-json', action='store_true', help='save a cocoapi-compatible JSON results file')
 parser.add_argument(
     '--img-size', type=int, default=416, help='inference size (pixels)')
 
@@ -36,7 +32,8 @@ if __name__ == '__main__':
     dataset_VOC_2007 = BboxDataSet(dataset_folder, 'VOC2007')
     opt = parser.parse_args()
     object_detector = YoloV3DetectorWrapper(
-        opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg, conf_thres=opt.conf_thres)
+        opt.cfg, opt.img_size, opt.weight_file, opt.data_cfg, conf_thres=opt.conf_thres,
+        nms_thres=opt.nms_thres)
     bbox_map_evaluator = BboxMAPEvaluator()
     # which will lead to ~0.79
     print(bbox_map_evaluator.evaluate(object_detector, dataset_VOC_2007)['mAP'])
