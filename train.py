@@ -29,7 +29,7 @@ from utils.utils import (
     compute_loss
 )
 from utils import torch_utils
-from utils import parse_data_cfg
+from utils.parse_config import parse_data_cfg
 
 # Hyperparameters: train.py --evolve --epochs 2 --img-size 320, Metrics: 0.204      0.302      0.175      0.234 (square smart)  # noqa
 hyp = {'xy': 0.2,  # xy loss gain
